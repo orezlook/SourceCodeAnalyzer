@@ -1,0 +1,118 @@
+import tkinter as tk
+from tkinter import filedialog
+import os
+import re
+from openpyxl import Workbook
+from tkinter import scrolledtext
+
+def analyze_directory(directory_path, excel_file_name):
+    wb = Workbook()
+    ws = wb.active
+    ws.append(["File Path", "Vulnerability Type", "Line Number", "Code"])
+
+    for root, dirs, files in os.walk(directory_path):
+        for file_name in files:
+            file_path = os.path.join(root, file_name)
+            with open(file_path, 'r', encoding='utf-8', errors='ignore') as file:
+                content = file.read()
+
+            sql_injection_vulnerabilities = re.findall(r'(?:mysql_query|mysqli_query|pg_query|sqlite_query|executeQuery|executeUpdate|execSQL|prepareStatement|prepareCall)\s*\(', content)
+            for vulnerability in sql_injection_vulnerabilities:
+                line_numbers = [str(i) for i, line in enumerate(content.split('\n'), start=1) if vulnerability in line]
+                for line_number in line_numbers:
+                    code = content.split('\n')[int(line_number)-1]
+                    ws.append([file_path, 'SQL Injection', line_number, code])
+
+            xss_vulnerabilities = re.findall(r'(?:echo|print|printf|document\.write|innerHTML)\s*\(', content)
+            for vulnerability in xss_vulnerabilities:
+                line_numbers = [str(i) for i, line in enumerate(content.split('\n'), start=1) if vulnerability in line]
+                for line_number in line_numbers:
+                    code = content.split('\n')[int(line_number)-1]
+                    ws.append([file_path, 'XSS', line_number, code])
+
+            code_injection_vulnerabilities = re.findall(r'(?:system|exec|popen|passthru|shell_exec)\s*\(', content)
+            for vulnerability in code_injection_vulnerabilities:
+                line_numbers = [str(i) for i, line in enumerate(content.split('\n'), start=1) if vulnerability in line]
+                for line_number in line_numbers:
+                    code = content.split('\n')[int(line_number)-1]
+                    ws.append([file_path, 'Code Injection', line_number, code])
+
+            command_injection_vulnerabilities = re.findall(r'(?:os\.system|subprocess\.Popen|shlex\.split)\s*\(', content)
+            for vulnerability in command_injection_vulnerabilities:
+                line_numbers = [str(i) for i, line in enumerate(content.split('\n'), start=1) if vulnerability in line]
+                for line_number in line_numbers:
+                    code = content.split('\n')[int(line_number)-1]
+                    ws.append([file_path, 'Command Injection', line_number, code])
+
+            path_traversal_vulnerabilities = re.findall(r'(?:open|file_get_contents)\s*\(', content)
+            for vulnerability in path_traversal_vulnerabilities:
+                line_numbers = [str(i) for i, line in enumerate(content.split('\n'), start=1) if vulnerability in line]
+                for line_number in line_numbers:
+                    code = content.split('\n')[int(line_number)-1]
+                    ws.append([file_path, 'Path Traversal', line_number, code])
+
+    excel_file_path = f"{excel_file_name}.xlsx"
+    wb.save(excel_file_path)
+    return excel_file_path
+
+def save_analysis(analysis_text, excel_file_path):
+    with open('analysis.txt', 'w') as file:
+        file.write(analysis_text)
+    
+    with open(excel_file_path, 'rb') as excel_file:
+        excel_data = excel_file.read()
+    
+    with open('results_with_analysis.xlsx', 'wb') as new_file:
+        new_file.write(excel_data)
+        with open('analysis.txt', 'rb') as analysis_file:
+            analysis_data = analysis_file.read()
+            new_file.write(b'\n')
+            new_file.write(analysis_data)
+
+def show_results():
+    directory_path = directory_entry.get()
+    excel_file_name = excel_entry.get()
+    
+    if directory_path and excel_file_name:
+        excel_file_path = analyze_directory(directory_path, excel_file_name)
+        result_text.delete(1.0, tk.END)
+        result_text.insert(tk.END, f"Risultati salvati nel file: {excel_file_path}\n\n")
+
+        analysis_window = tk.Toplevel(root)
+        analysis_window.title("Analisi")
+        analysis_window.geometry("600x400")
+
+        analysis_label = tk.Label(analysis_window, text="Inserisci le tue analisi:")
+        analysis_label.pack()
+        analysis_text = scrolledtext.ScrolledText(analysis_window, width=80, height=10)
+        analysis_text.pack()
+
+        save_button = tk.Button(analysis_window, text="Salva Analisi", command=lambda: save_analysis(analysis_text.get("1.0", tk.END), excel_file_path))
+        save_button.pack()
+    else:
+        result_text.delete(1.0, tk.END)
+        result_text.insert(tk.END, "Si prega di inserire il percorso della directory e il nome del file Excel.")
+
+root = tk.Tk()
+root.title("Source Analyzer")
+root.geometry("600x400")
+
+directory_label = tk.Label(root, text="Percorso Directory:")
+directory_label.pack()
+directory_entry = tk.Entry(root, width=50)
+directory_entry.pack()
+
+excel_label = tk.Label(root, text="Nome File Excel:")
+excel_label.pack()
+excel_entry = tk.Entry(root, width=50)
+excel_entry.pack()
+
+analyze_button = tk.Button(root, text="Avvia Analisi", command=show_results)
+analyze_button.pack()
+
+result_label = tk.Label(root, text="Risultati:")
+result_label.pack()
+result_text = scrolledtext.ScrolledText(root, width=80, height=10)
+result_text.pack()
+
+root.mainloop()
